@@ -36,13 +36,20 @@
 		"destination": "~/kubernetes.sh"
 	},
 	{
+		"type": "file",
+		"source": "scripts/configure.sh",
+		"destination": "~/configure.sh"
+	},
+	{
 		"type": "shell",
 		"remote_folder": "~",
 		"inline": [
 			"sudo sh ~/network.sh",
 			"sudo sh ~/kubernetes.sh",
+			"sudo sh ~/configure.sh",
 			"rm ~/kubernetes.sh",
-			"rm ~/network.sh"
+			"rm ~/network.sh",
+			"rm ~/configure.sh"
 		]
 	}
   ]
