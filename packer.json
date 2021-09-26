@@ -1,0 +1,49 @@
+{
+  "builders": [
+	{
+	  "type": "vmware-iso",
+	  "iso_url": "file://C:/Users/Burak/Desktop/packer/iso/flatcar.iso",
+	  "iso_checksum": "md5:896d87e6a1915e5477b8dd4eb6d636e2",
+	  "memory": "2048",
+	  "cores": "1",
+      "cpus": "2",
+      "disk_adapter_type": "scsi",
+      "disk_size": "4608",
+	  "ssh_username": "builder",
+	  "ssh_password": "builder",
+	  "shutdown_command": "sudo shutdown -P now",
+	  "http_directory": "./http/",
+	  "boot_command": [
+        "curl -sLo /tmp/ignition.json http://{{ .HTTPIP }}:{{ .HTTPPort }}/ignition-builder.json<enter><wait>",
+		"curl -sLo /tmp/flatcar_production_vmware_raw_image.bin.bz2 http://{{ .HTTPIP }}:{{ .HTTPPort }}/flatcar_production_vmware_raw_image.bin.bz2<enter><wait5s>",
+		"sed -i \"s|BUILDERSSHAUTHKEY||\" /tmp/ignition.json<enter><wait>",
+		"sudo flatcar-install -d /dev/sda -f /tmp/flatcar_production_vmware_raw_image.bin.bz2 -i /tmp/ignition.json<enter><wait90s>",
+		"sudo reboot<enter>"
+      ],
+      "boot_wait": "30s",
+	  "ssh_timeout": "2h"
+	}
+  ],
+  "provisioners": [
+	{
+		"type": "file",
+		"source": "scripts/network.sh",
+		"destination": "~/network.sh"
+	},
+	{
+		"type": "file",
+		"source": "scripts/kubernetes.sh",
+		"destination": "~/kubernetes.sh"
+	},
+	{
+		"type": "shell",
+		"remote_folder": "~",
+		"inline": [
+			"sudo sh ~/network.sh",
+			"sudo sh ~/kubernetes.sh",
+			"rm ~/kubernetes.sh",
+			"rm ~/network.sh"
+		]
+	}
+  ]
+}
