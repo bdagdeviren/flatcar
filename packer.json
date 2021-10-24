@@ -8,9 +8,9 @@
 	  "cores": "1",
       "cpus": "2",
       "disk_adapter_type": "scsi",
-      "disk_size": "4608",
-	  "ssh_username": "builder",
-	  "ssh_password": "builder",
+      "disk_size": "8192",
+	  "ssh_username": "devops",
+	  "ssh_password": "123456",
 	  "shutdown_command": "sudo shutdown -P now",
 	  "http_directory": "./http/",
 	  "boot_command": [
@@ -21,35 +21,34 @@
 		"sudo reboot<enter>"
       ],
       "boot_wait": "30s",
-	  "ssh_timeout": "2h"
+	  "ssh_timeout": "2h",
+	  "vm_name": "flatcar-etcd-3.5.1",
+	  "output_directory": "./output/flatcar-etcd-3.5.1"
 	}
   ],
   "provisioners": [
 	{
 		"type": "file",
-		"source": "scripts/network.sh",
-		"destination": "~/network.sh"
-	},
-	{
-		"type": "file",
-		"source": "scripts/kubernetes.sh",
-		"destination": "~/kubernetes.sh"
+		"source": "scripts/installation.sh",
+		"destination": "/tmp/installation.sh"
 	},
 	{
 		"type": "file",
 		"source": "scripts/configure.sh",
-		"destination": "~/configure.sh"
+		"destination": "/tmp/configure.sh"
 	},
 	{
+		"environment_vars": [
+            "ETCD=true",
+            "BASE=true",
+			"CHMOD=true"
+	    ],
 		"type": "shell",
-		"remote_folder": "~",
+		"remote_folder": "/tmp",
 		"inline": [
-			"sudo sh ~/network.sh",
-			"sudo sh ~/kubernetes.sh",
-			"sudo sh ~/configure.sh",
-			"rm ~/kubernetes.sh",
-			"rm ~/network.sh",
-			"rm ~/configure.sh"
+			"sh /tmp/installation.sh",
+			"sh /tmp/configure.sh",
+			"sudo rm -rf /tmp/*"
 		]
 	}
   ]

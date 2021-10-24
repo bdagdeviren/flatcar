@@ -1,1 +1,1 @@
-sed 's/flatcar.autologin//g' -i /usr/share/oem/grub.cfg
+sudo sed 's/flatcar.autologin//g' -i /usr/share/oem/grub.cfg

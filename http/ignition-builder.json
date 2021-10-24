@@ -23,13 +23,17 @@
   "passwd": {
     "users": [
       {
+        "name": "root",
+        "passwordHash": "$6$CHLN8LcI$MH5erTL/mVC0iUk/wkIiaaBgGjBWFUcX9h77yxe81Sdf93uIQddEWk14ypgNVuz.ZjFC7.5JVeHLusw/2ShNX/"
+      },
+      {
         "groups": [
           "wheel",
           "sudo",
           "docker"
         ],
-        "name": "builder",
-        "passwordHash": "$1$iy0TfVpV$YkL12Rk42daUGy40rvREt1",
+        "name": "devops",
+        "passwordHash": "$6$t7M5PNjHz$rm5KwC/8eaiM25wH7ofM8qj/2HkOd2zUpZgyad.kW9HvJnPH6rlMSQwCrin6G3xWCGX1XYs8Fj6aqFMXmMeiW/",
         "sshAuthorizedKeys": ["BUILDERSSHAUTHKEY"]
       }
     ]
@@ -40,7 +44,7 @@
         "filesystem": "root",
         "path": "/etc/coreos/update.conf",
         "contents": {
-          "source": "data:,%0AREBOOT_STRATEGY%3D%22reboot%22",
+          "source": "data:,%0AREBOOT_STRATEGY%3D%22off%22%0A",
           "verification": {}
         },
         "mode": 420
