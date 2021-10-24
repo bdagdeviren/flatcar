@@ -1,0 +1,220 @@
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: "${CLUSTER_NAME}"
+  namespace: "${NAMESPACE}"
+spec:
+  clusterNetwork:
+    services:
+      cidrBlocks: ${SERVICE_CIDR:=["10.128.0.0/12"]}
+    pods:
+      cidrBlocks: ${POD_CIDR:=["192.168.0.0/16"]}
+    serviceDomain: ${SERVICE_DOMAIN:="cluster.local"}
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+    kind: DockerCluster
+    name: "${CLUSTER_NAME}"
+    namespace: "${NAMESPACE}"
+  controlPlaneRef:
+    kind: KubeadmControlPlane
+    apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+    name: "${CLUSTER_NAME}-control-plane"
+    namespace: "${NAMESPACE}"
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: DockerCluster
+metadata:
+  name: "${CLUSTER_NAME}"
+  namespace: "${NAMESPACE}"
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: DockerMachineTemplate
+metadata:
+  name: "${CLUSTER_NAME}-control-plane"
+  namespace: "${NAMESPACE}"
+spec:
+  template:
+    spec:
+      extraMounts:
+        - containerPath: "/var/run/docker.sock"
+          hostPath: "/var/run/docker.sock"
+---
+kind: KubeadmControlPlane
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+metadata:
+  name: "${CLUSTER_NAME}-control-plane"
+  namespace: "${NAMESPACE}"
+spec:
+  replicas: ${CONTROL_PLANE_MACHINE_COUNT}
+  machineTemplate:
+    infrastructureRef:
+      kind: DockerMachineTemplate
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+      name: "${CLUSTER_NAME}-control-plane"
+      namespace: "${NAMESPACE}"
+  kubeadmConfigSpec:
+    clusterConfiguration:
+      controllerManager:
+        extraArgs: {enable-hostpath-provisioner: 'true'}
+      apiServer:
+        certSANs: [localhost, 127.0.0.1]
+      etcd:
+        external:
+          endpoints:
+            - https://192.168.1.11:2379
+          caFile: /etc/kubernetes/pki/etcd/ca.crt
+          certFile: /etc/kubernetes/pki/apiserver-etcd-client.crt
+          keyFile: /etc/kubernetes/pki/apiserver-etcd-client.key
+    initConfiguration:
+      nodeRegistration:
+        criSocket: /var/run/containerd/containerd.sock
+        kubeletExtraArgs:
+          # We have to pin the cgroupDriver to cgroupfs as kubeadm >=1.21 defaults to systemd
+          # kind will implement systemd support in: https://github.com/kubernetes-sigs/kind/issues/1726
+          cgroup-driver: cgroupfs
+          eviction-hard: 'nodefs.available<0%,nodefs.inodesFree<0%,imagefs.available<0%'
+    joinConfiguration:
+      nodeRegistration:
+        criSocket: /var/run/containerd/containerd.sock
+        kubeletExtraArgs:
+          # We have to pin the cgroupDriver to cgroupfs as kubeadm >=1.21 defaults to systemd
+          # kind will implement systemd support in: https://github.com/kubernetes-sigs/kind/issues/1726
+          cgroup-driver: cgroupfs
+          eviction-hard: 'nodefs.available<0%,nodefs.inodesFree<0%,imagefs.available<0%'
+  version: "${KUBERNETES_VERSION}"
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: DockerMachineTemplate
+metadata:
+  name: "${CLUSTER_NAME}-md-0"
+  namespace: "${NAMESPACE}"
+spec:
+  template:
+    spec: {}
+---
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+kind: KubeadmConfigTemplate
+metadata:
+  name: "${CLUSTER_NAME}-md-0"
+  namespace: "${NAMESPACE}"
+spec:
+  template:
+    spec:
+      joinConfiguration:
+        nodeRegistration:
+          kubeletExtraArgs:
+            # We have to pin the cgroupDriver to cgroupfs as kubeadm >=1.21 defaults to systemd
+            # kind will implement systemd support in: https://github.com/kubernetes-sigs/kind/issues/1726
+            cgroup-driver: cgroupfs
+            eviction-hard: 'nodefs.available<0%,nodefs.inodesFree<0%,imagefs.available<0%'
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineDeployment
+metadata:
+  name: "${CLUSTER_NAME}-md-0"
+spec:
+  clusterName: "${CLUSTER_NAME}"
+  replicas: ${WORKER_MACHINE_COUNT}
+  selector:
+    matchLabels:
+  template:
+    spec:
+      clusterName: "${CLUSTER_NAME}"
+      version:  "${KUBERNETES_VERSION}"
+      bootstrap:
+        configRef:
+          name: "${CLUSTER_NAME}-md-0"
+          namespace: "${NAMESPACE}"
+          apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+          kind: KubeadmConfigTemplate
+      infrastructureRef:
+        name: "${CLUSTER_NAME}-md-0"
+        namespace: "${NAMESPACE}"
+        apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+        kind: DockerMachineTemplate
+---
+kind: Secret
+apiVersion: v1
+metadata:
+  name: ${CLUSTER_NAME}-apiserver-etcd-client
+  namespace: ${NAMESPACE}
+data:
+  tls.crt: |
+    LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURIRENDQWdTZ0F3SUJBZ0lJY1EzeTAydlY5
+    SG93RFFZSktvWklodmNOQVFFTEJRQXdEekVOTUFzR0ExVUUKQXhNRVpYUmpaREFlRncweU1URXdN
+    alF3TnpVek5UaGFGdzB5TWpFd01qUXdOelUwTURCYU1FTXhGekFWQmdOVgpCQW9URG5ONWMzUmxi
+    VHB0WVhOMFpYSnpNU2d3SmdZRFZRUURFeDlsZEdOa0xXdDFZbVV0WVhCcGMyVnlkbVZ5CkxXVjBZ
+    MlF0WTJ4cFpXNTBNSUlCSWpBTkJna3Foa2lHOXcwQkFRRUZBQU9DQVE4QU1JSUJDZ0tDQVFFQXpJ
+    WnAKRWhHRjZScXBvSXEzc0dZSUpIUGpxVUNqRFRMSkhkRGtBb21CWVdKYS9oK3ZhbG82SlZvZk1r
+    R24rVGNRZ1YxVgpXTENMWjF5dzBHZ3hLbEFNbGdOUERKZTBLVCtSbVorY2FhUVFrSktrNkViYTgy
+    aFJUUmlvMjJZaWpNczVtbGpzClNPbEVPYXMzVzZrakFpYkxFeS9wZlVydFN2RklEdW43Z0tPWXVE
+    ci9JMjVHQTBmS2hIV3E5ZXA1bXd4WG5hTkwKWDBuYU53emIySjAxcnRNRFdIdUMya01oVEh3d3dy
+    YmlSdGgxUzJJdDAvZ0RPQ0FUMndRaGtvOVlLZnFIbi9MdgpsTk9kQ1JYNGRBSm16YVhiMVVicXBq
+    Q005d29ITkxkUU1US1E4TE1wU0FKem84Rk1SZ2w5YUZtYW04aW50Z3EyClB5WTRFRTZqQU1xWlp2
+    Z0QxUUlEQVFBQm8wZ3dSakFPQmdOVkhROEJBZjhFQkFNQ0JhQXdFd1lEVlIwbEJBd3cKQ2dZSUt3
+    WUJCUVVIQXdJd0h3WURWUjBqQkJnd0ZvQVVoT3lvY3hNZkdlbTdBNnFtMFk0N2pwNTRLMEl3RFFZ
+    SgpLb1pJaHZjTkFRRUxCUUFEZ2dFQkFCUDdLSWpGMFRlcVVMUkYxTzBiU0RwT3E0dkxiamJIYk9z
+    UnFTcytNQWJFClRJQmZzYldZVEduUFFtWHlXRzdIY3RqOHJmZ3JPUVZrcWM2Q3J4d25kYWtpRkVp
+    MlpJODY3YjZsRXNOa3VHcHMKRWIyNjZ0S3BkazVCMDJ3Yk9EdW81Vy9iMHYzTHpneEFhUDB2RHlt
+    WHU1NzhiVGYyZnZvbFBEeE96d1lOTnFKQgpaMG5ZRVhGVS8wbE1PNitQWTJUZDAwUU1zYTFTdmkx
+    NTIwWVdJc2FNTjBVckg3YnZ1M3NyS2FlMW01aDFScjA5CjlON3loaGZRWTlVQm5aZkp4TkVrd0w2
+    SzI2VktIU2pSanpKZjV4TEFuUEZxNHN4S2tuRDRCclkxekhhMjJ1cGQKdEkyc1JiWksxclJWVDd5
+    bi8wTW9LTXEvbUd4ZnRUNGY4L3VsT1ArZkpUST0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
+  tls.key: |
+    LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFcEFJQkFBS0NBUUVBeklacEVoR0Y2
+    UnFwb0lxM3NHWUlKSFBqcVVDakRUTEpIZERrQW9tQllXSmEvaCt2CmFsbzZKVm9mTWtHbitUY1Fn
+    VjFWV0xDTFoxeXcwR2d4S2xBTWxnTlBESmUwS1QrUm1aK2NhYVFRa0pLazZFYmEKODJoUlRSaW8y
+    Mllpak1zNW1sanNTT2xFT2FzM1c2a2pBaWJMRXkvcGZVcnRTdkZJRHVuN2dLT1l1RHIvSTI1RwpB
+    MGZLaEhXcTllcDVtd3hYbmFOTFgwbmFOd3piMkowMXJ0TURXSHVDMmtNaFRId3d3cmJpUnRoMVMy
+    SXQwL2dECk9DQVQyd1Foa285WUtmcUhuL0x2bE5PZENSWDRkQUptemFYYjFVYnFwakNNOXdvSE5M
+    ZFFNVEtROExNcFNBSnoKbzhGTVJnbDlhRm1hbThpbnRncTJQeVk0RUU2akFNcVpadmdEMVFJREFR
+    QUJBb0lCQUM4UWF4Tk9WdnRhT0ZpSwpNMVR6VmNKVnJMamc5K1Jzb0YwdEdaci8yM2IyZEN2d1RL
+    UnptTmZKa2s0MVQ1c0lzZEtqRUtXMUVvODVoREtoCkYxYytUbmNpMGNqN0MrbEdDSkpLYVdyaDV6
+    SHRuT2NhanYzZUxuOUlRbXNpYUtidmlSVGNpNXNIbXJ5T2l0R2IKN1VOc2UrU3hiTkI1TW52QlpD
+    eVNhVjZqeHR2MXhnOXJhY2xNYWxYR0w3YStsR0xWS3BNczNUUW0zMUNLSE5scQpSb212UENCYXhN
+    M1U3VWxTT2k1UnhUMExNRFRJRHlQQ1NLaW45YW1pWWJ2bGZGT1NOUEZJT2VNbzRXbElHbVVnCnkr
+    MWdNdWQ0UDBjTjFVeDltY0FucnJTZUQzZ0FqZ0p5OWNZTjIwTkJKLzJQaExuY3I0Wkw5ZlIxcHhZ
+    UlFlOGkKOGUwZ3RpRUNnWUVBMkRFUG1BSWFXS3E4RXl2MFRqb2Zack9waFpMZE5mcU5URDIvUE5U
+    N2x3YTl3MVRwa1VhWApVbEpRQkRoeExqTXBVS1RQR1MyNWR0azZmaHNHb2daeUpzSVBNcXYrdnBP
+    R1cva1R4TDlEOTdFZEVqNzgvT2NqClp6Y3JpV0xPMWdDZ2E5bHRKMXJLNklNTjVYYVJKblJRZUZQ
+    NnArWVdBSktJTVZHdU1taFU0UDBDZ1lFQThpOW4KWnIrWmc0a0VWN0ZHWkI1NTNGRkhNRzlxeERG
+    NWFNN2dXWEI3Uk9CWmw4b0pCL3Nza0JLOERqTlZjeURYUnF1Qwo4VW83dXFLZ0FuUk9GOC9lOFRK
+    bnYraFRnb0M5SUhDZ0JWY00yOC9wK1FIS2R1cW8wSnhvWG4xZk1rbTN3UFp6Cm5hVmRHWnpxNzlp
+    SVZaTmp1VUViSXU1ek5LbEd1V0UyOTVZbE1ia0NnWUVBdy9hc3FOLzNHN29mWXMxcjFPRFEKaDlx
+    QTVpZjZ4aXdIbWowNk5Kem1OTDZTa2hWTTVqZHpnTlpGMjUyQjBodmo3a3FGd3MvMGxpdFAzdkVH
+    Y1NXZwpvVXMwVlgwY0c0bER0K2l0cDZDcnJrQm9GcHJyM1I1eXMrT0pYaTRuU0Vvbkg3dGxPdEFN
+    cnZma1I4UFN6R1dRCmI1SEgyaHN3aEhKT2EwNGJ0V3Rtek0wQ2dZQXNORTdSU0VPQzZLMXNQQ1Uy
+    L1FFTkg2QzR6SDFXVmhsczhlV3QKTFlTeWE2aXV0ZWUwRnpwcENhSmRqUzBabUhMeXFUZDdSeXRq
+    dzI4bFE0bEZlMkdiOExGVEs5cWlSVkUvN0k2bwpxdHpqK2kwZ2tCMGVXM0o0c1RPem0zcVd1VEhh
+    L0tEWnMyY3MxNkZpS2Ntb3BRQmN2ZTl3RHNua1lNbFI2TmFaCmxrUXZzUUtCZ1FDQ0FQdlFPOUdX
+    bjNhOFJSYzdqVGtKdE41N1VCbTkvbTFjTkV0Y3RWamNYTDd6TC9MTXAwQTYKc1NFQ2tKZjF5d2dG
+    S0lFMVZhUjB4a3laSFRBZVptQllsZlZnbGtrMkV5MkZ5TFQwNFNPRVA1VUdTMm4zV3MvTgpRUU1w
+    Y1ZRSVpkUHVld1hET3dPeWVoeENNdzBhaytqUXJ6OEJoR0h4MVRGQUh3dE10WmVJTVE9PQotLS0t
+    LUVORCBSU0EgUFJJVkFURSBLRVktLS0tLQo=
+---
+kind: Secret
+apiVersion: v1
+metadata:
+  name: ${CLUSTER_NAME}-etcd
+  namespace: ${NAMESPACE}
+data:
+  tls.crt: |
+    LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUM3akNDQWRhZ0F3SUJBZ0lJZTl3QVByRko5
+    ZXN3RFFZSktvWklodmNOQVFFTEJRQXdEekVOTUFzR0ExVUUKQXhNRVpYUmpaREFlRncweU1URXdN
+    alF3TnpVek5UaGFGdzB5TWpFd01qUXdOelV6TlRsYU1BOHhEVEFMQmdOVgpCQU1UQkdWMFkyUXdn
+    Z0VpTUEwR0NTcUdTSWIzRFFFQkFRVUFBNElCRHdBd2dnRUtBb0lCQVFETUZOWE9uc3JoCjBwTmVS
+    RnhpSHNONXVEMUJGM0wxKzZDekM5NTd5VXBzdUF0NjBXQ1QxcmkyT1ZJa2N5YXdjZ0V0ZkVTSW9G
+    SisKYnU4RlpEYnZzT0NEa3JZVnZyT2M5NUhMNFJvWCtPUHNmeHRwUk5jSlZxaTJCMHd0YWFqTzYr
+    MVNqcXJjRnc3VQpFaGJrdmJ2eFp4VFJOOGtzQnRubUlCQXR3VzU0V0RGTmtOUEdmeGJmMGUrZzE4
+    aXRwSTFHb2drd2F3bG5uSno0CnJmZGJzYUw4aG1ybGVFbnF5T0dxYXJydmFkNEF3c2lCdDcySnlw
+    UmUzWXAxTFduMnFKNFB5T0JValVId29RM2sKTXF5MlpMNEJ5OElmRlNxOFRPTUl1RmlETkk3bXRG
+    OXFkOGR5OGE3T09rdHlobkpiQW1OU2JtdFArL2FkU0NmUQpJV1lkU3BzNGJaMjNBZ01CQUFHalRq
+    Qk1NQTRHQTFVZER3RUIvd1FFQXdJRm9EQWRCZ05WSFNVRUZqQVVCZ2dyCkJnRUZCUWNEQVFZSUt3
+    WUJCUVVIQXdJd0d3WURWUjBSQkJRd0VvSUVaWFJqWkljRXdLZ0JDNGNFZndBQUFUQU4KQmdrcWhr
+    aUc5dzBCQVFzRkFBT0NBUUVBcUQ2V0FQMnN4cnRweXUrUmgzKzFWaE15V2VtcWRTRFJjOERCQWJl
+    QQoyVzllMVBMUWRYbVNMbEpDUmZLZmxpSDZFbWtiR3BOUDdDWWZmRlNhMXRLaHozZVBGR0lTM3pB
+    K2FMejU1bkZKCnBtYTZDZDQyUldYeVByQWg4TGgremovL0YzbzJUUU1NeGpJTkY5SjJhTUNWamt1
+    ZVlBNE1lSEMwdkN3dDlMSzQKTEpyVEhLWjJQYTRGSHJWVVFmOVFmQnd0N0lzZnNWZ0xvVWlDNlJZ
+    eldpbTBRTWRVVEhKYjJvT1VVN2wyNkRRLwpoSGsvSGc4VXZzcm14Y09QNzZRd3RDaElKSWYxTDVq
+    UmVlK3JkVk85dzY1M3lsZEVMcVJMWThTeGdjaUZsRldFCmR2b0hOQVdNYWo5ZWViRDV0eXJCTEJ0
+    Ymhtd0E5cTVWTkRZakNzb2Vhd2huekE9PQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg==
