@@ -6,8 +6,8 @@ mkdir -p /opt/bin
 
 if [[ "$ETCD" == "true" ]] 
 then
-    sudo mkdir -p /var/cache/etcdadm/etcd/v3.5.1
-    #Etcdadm Installation
+        sudo mkdir -p /var/cache/etcdadm/etcd/v3.5.1
+        #Etcdadm Installation
 	wget https://github.com/kubernetes-sigs/etcdadm/releases/download/v0.1.5/etcdadm-linux-amd64 -O /opt/bin/etcdadm
 	#Etcd Installation
 	wget https://github.com/etcd-io/etcd/releases/download/v3.5.1/etcd-v3.5.1-linux-amd64.tar.gz -O etcd-v3.5.1-linux-amd64.tar.gz
